@@ -36,11 +36,11 @@ def main():
         with open("state", "rb") as f:
             state = pickle.load(f)
 
-    update_id = state["update_id"]
-    admins = state["admins"]
+    update_id = state.get("update_id", None)
+    admins = state.get("admins", set())
 
-    user_messages = []
-    responses = set()
+    user_messages = state.get("user_messages", [])
+    responses = state.get("responses", set())
 
     while True:
         updates = get_updates(update_id)
@@ -64,8 +64,8 @@ def main():
                         admins.add(chat_id)
                         send_message(chat_id, "You will receive user messages every minute.")
                 elif chat_id in admins and "reply_to_message" in updates["result"][0]["message"]:
-                    user_id = updates["result"][0]["message"]["from"]["id"]
-                    responses.add((user_id, text))
+                    user_id = updates["result"][0]["message"]["reply_to_message"]["text"].split(':')[0]
+                    responses.add((int(user_id), text))
                 else:
                     if chat_id not in admins:
                         user_messages.append((chat_id, text))
@@ -73,20 +73,27 @@ def main():
 
         if user_messages:
             if admins:
-                for _, text in user_messages:
+                for user_id, text in user_messages:
                     for admin_id in admins:
-                        send_message(admin_id, text)
+                        send_message(admin_id, f'{user_id}:{text}')
                 user_messages = []
 
         if responses:
             new = responses.copy()
             for user_id, text in responses:
                 if user_id not in admins:
-                    send_message(user_id, text)
+                    send_message(user_id, f'admins response:\n{text}')
                     new.remove((user_id, text))
             responses = new
 
-        pickle.dump({"update_id": update_id, "admins": admins}, open("state", "wb"))
+        pickle.dump(
+            {
+                "update_id": update_id, 
+                "admins": admins, 
+                "user_messages": user_messages, 
+                "responses":responses
+            },
+            open("state", "wb"))
 
         print(updates)
 
